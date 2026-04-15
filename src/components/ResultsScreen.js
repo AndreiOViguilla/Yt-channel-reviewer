@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import VideoCard from './VideoCard';
+import ChannelCard from './ChannelCard';
 
 export default function ResultsScreen({ results }) {
   const [filter, setFilter] = useState('all');
@@ -103,7 +104,7 @@ export default function ResultsScreen({ results }) {
           </div>
         ))}
       </div>
-
+      <ChannelCard videos={results.map(r => r._video)} />
       <div style={s.filterRow}>
         {filters.map((f) => (
           <button key={f.key} style={s.pill(filter === f.key)} onClick={() => setFilter(f.key)}>{f.label}</button>

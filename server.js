@@ -218,4 +218,101 @@ Respond ONLY with a valid JSON object, no markdown:
   aiReq.end();
 }
 
+app.post('/api/get-branding', (req, res) => {
+  const { accessToken } = req.body;
+  const options = {
+    hostname: 'www.googleapis.com',
+    path: '/youtube/v3/channels?part=brandingSettings&mine=true',
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer ' + accessToken },
+  };
+  const getReq = https.request(options, (getRes) => {
+    let data = '';
+    getRes.on('data', chunk => data += chunk);
+    getRes.on('end', () => {
+      try {
+        const parsed = JSON.parse(data);
+        if (parsed.error) return res.status(500).json({ error: { message: parsed.error.message } });
+        const branding = parsed.items?.[0]?.brandingSettings?.channel || {};
+        console.log('Branding fields:', JSON.stringify(branding, null, 2));
+        res.json({
+          unsubscribedTrailer: branding.unsubscribedTrailer || '',
+          featuredVideoId: branding.featuredVideoId || '',
+        });
+      } catch (e) {
+        res.status(500).json({ error: { message: 'Parse error: ' + e.message } });
+      }
+    });
+  });
+  getReq.on('error', e => res.status(500).json({ error: { message: e.message } }));
+  getReq.end();
+});
+
+app.post('/api/update-branding', (req, res) => {
+  const { accessToken, unsubscribedTrailer, featuredVideoId } = req.body;
+
+  const getOptions = {
+    hostname: 'www.googleapis.com',
+    path: '/youtube/v3/channels?part=brandingSettings&mine=true',
+    method: 'GET',
+    headers: { 'Authorization': 'Bearer ' + accessToken },
+  };
+
+  const getReq = https.request(getOptions, (getRes) => {
+    let getData = '';
+    getRes.on('data', chunk => getData += chunk);
+    getRes.on('end', () => {
+      try {
+        const parsed = JSON.parse(getData);
+        if (parsed.error) return res.status(500).json({ error: { message: parsed.error.message } });
+
+        const channelId = parsed.items?.[0]?.id;
+        const brandingSettings = parsed.items?.[0]?.brandingSettings || {};
+
+        if (!brandingSettings.channel) brandingSettings.channel = {};
+        if (unsubscribedTrailer !== undefined) brandingSettings.channel.unsubscribedTrailer = unsubscribedTrailer;
+        if (featuredVideoId !== undefined) brandingSettings.channel.featuredVideoId = featuredVideoId;
+
+        console.log('Updating branding:', JSON.stringify(brandingSettings.channel, null, 2));
+
+        const putBody = JSON.stringify({ id: channelId, brandingSettings });
+        const putOptions = {
+          hostname: 'www.googleapis.com',
+          path: '/youtube/v3/channels?part=brandingSettings',
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + accessToken,
+            'Content-Type': 'application/json',
+            'Content-Length': Buffer.byteLength(putBody),
+          },
+        };
+
+        const putReq = https.request(putOptions, (putRes) => {
+          let putData = '';
+          putRes.on('data', chunk => putData += chunk);
+          putRes.on('end', () => {
+            console.log('YouTube response:', putData);
+            try {
+              const result = JSON.parse(putData);
+              if (result.error) return res.status(500).json({ error: { message: result.error.message } });
+              res.json({ success: true });
+            } catch (e) {
+              res.status(500).json({ error: { message: 'Parse error: ' + e.message } });
+            }
+          });
+        });
+
+        putReq.on('error', e => res.status(500).json({ error: { message: e.message } }));
+        putReq.write(putBody);
+        putReq.end();
+      } catch (e) {
+        res.status(500).json({ error: { message: 'Parse error: ' + e.message } });
+      }
+    });
+  });
+
+  getReq.on('error', e => res.status(500).json({ error: { message: e.message } }));
+  getReq.end();
+});
+
 app.listen(3001, () => console.log('Proxy running on http://localhost:3001'));
